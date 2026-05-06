@@ -1,0 +1,18 @@
+# Virtual environment
+venv/
+.venv/
+env/
+
+# Output files
+data/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Cookies file (may contain sensitive data)
+cookies.txt
+
+# IDE
+.vscode/
