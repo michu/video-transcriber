@@ -43,6 +43,7 @@ class SubtitlesTranslatorService:
     def __init__(self, model_name: str, device: str = None):
         """Load the NLLB model and tokenizer."""
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
+        self.length_penalty = 0
         self.num_beams = 12
         self.max_new_tokens = 512
 
@@ -279,6 +280,7 @@ class SubtitlesTranslatorService:
             generated = self.model.generate(
                 **encoded,
                 forced_bos_token_id=forced_id,
+                length_penalty=self.length_penalty,
                 max_new_tokens=self.max_new_tokens,
                 num_beams=self.num_beams
             )
@@ -305,6 +307,7 @@ class SubtitlesTranslatorService:
             generated = self.model.generate(
                 **encoded,
                 forced_bos_token_id=forced_id,
+                length_penalty=self.length_penalty,
                 max_new_tokens=self.max_new_tokens,
                 num_beams=self.num_beams
             )
