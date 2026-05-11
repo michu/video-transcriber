@@ -1,4 +1,5 @@
 """Main application window for Video Transcriber."""
+import logging
 import sys
 import queue
 import shutil
@@ -19,6 +20,7 @@ from services.subtitles_translator import SubtitlesTranslatorService
 ctk.set_appearance_mode("system")
 ctk.set_default_color_theme("blue")
 
+logger = logging.getLogger(__name__)
 
 class QueueLogger:
     """Redirects stdout/stderr writes to a thread-safe queue for UI consumption."""
@@ -112,8 +114,7 @@ class App(ctk.CTk):
             form_frame,
             text="Enable VAD",
             grid_kwargs={"row": 1, "column": 1, "sticky": "w", "padx": 5, "pady": 5}
-        )
-        #self.enable_vad.set(True)
+        )  
 
         # Translation model
         components.create_label(
@@ -318,22 +319,13 @@ class App(ctk.CTk):
             
     def open_data_folder(self):
         """Open the output data folder in the system file explorer."""
-        data_folder = os.path.abspath("data")
-        if not os.path.exists(data_folder):
-            os.makedirs(data_folder, exist_ok=True)
-
-        if sys.platform == "win32":
-            os.startfile(data_folder)
-        elif sys.platform == "darwin":
-            subprocess.run(["open", data_folder])
-        else:
-            subprocess.run(["xdg-open", data_folder])
+        dialogs.open_folder(os.path.abspath("data"))
 
     def start_transcription(self):
         """Validate inputs and launch the processing thread."""
         source = self.path_entry.get().strip()
         if not source:
-            print("No source provided.")
+            logger.info("No source provided.")
             return
 
         # clean up finished threads before adding a new one
@@ -365,39 +357,39 @@ class App(ctk.CTk):
             if os.path.exists(output_dir):
                 shutil.rmtree(output_dir)
             os.makedirs(output_dir, exist_ok=True)
-            print(f"Cleared output directory: {output_dir}")
+            logger.info(f"Cleared output directory: {output_dir}")
 
             # download file if source is a URL, otherwise just copy to output directory
             downloader = VideoDownloaderService()
             result = downloader.download(source, output_path, {
-                "use_youtube_subs": self.use_yt_subs.get()
+                "use_youtube_subs": bool(self.use_yt_subs.get())
             })
-            print(f"Download finished: {result.video_path}")
+            logger.info(f"Download finished: {result.video_path}")
             if result.subtitles:
-                print(f"Found {len(result.subtitles)} subtitle(s)")
+                logger.info(f"Found {len(result.subtitles)} subtitle(s)")
                 for sub in result.subtitles:
-                    print(f"  - {sub.language}: {sub.path}")
+                    logger.info(f"  - {sub.language}: {sub.path}")
 
             # extract audio and subtitles (if not already from YouTube)
             if result.subtitles:
                 language_code = result.subtitles[0].language
-                print(f"Using language from downloaded subtitles: {language_code}")
+                logger.info(f"Using language from downloaded subtitles: {language_code}")
             else:
                 audio_service = AudioExtractorService()
                 wav_path = audio_service.extract(result.video_path)
-                print(f"Audio extracted: {wav_path}")
+                logger.info(f"Audio extracted: {wav_path}")
 
                 language_name = self.source_lang.get()
                 language_code = LANGUAGES[language_name]
-                print(f"Using language from UI selection: {language_code}")
+                logger.info(f"Using language from UI selection: {language_code}")
 
                 model_name = self.transcription_model_box.get() or TRANSCRIPTION_MODELS[0]
                 subtitles_service = SubtitlesExtractorService(
                     model_name=model_name.removeprefix("openai-whisper-"),
-                    enable_vad=self.enable_vad.get()
+                    enable_vad=bool(self.enable_vad.get())
                 )
                 result.subtitles = [subtitles_service.extract(wav_path, language_code=language_code)]
-                print(f"Subtitles extracted: {result.subtitles[0].path}")
+                logger.info(f"Subtitles extracted: {result.subtitles[0].path}")
 
             # translate subtitles if needed
             if len(self.languages_selected) == 1:
@@ -425,12 +417,12 @@ class App(ctk.CTk):
                 base = ".".join(parts[:-2]) if len(parts) >= 3 else parts[0]
                 out_path = os.path.join(dir_name, f"{base}.{target_iso}.srt")
 
-                print(f"Translating {srt_path} -> {out_path} (src={language} tgt={target_iso})")
+                logger.info(f"Translating {srt_path} -> {out_path} (src={language} tgt={target_iso})")
                 translator.translate_file(srt_path, out_path, src_lang=language, tgt_lang=target_iso)
-                print(f"Translated subtitles saved: {out_path}")
+                logger.info(f"Translated subtitles saved: {out_path}")
 
         except Exception as e:
-            print(f"Processing failed: {e}")
+            logger.error(f"Processing failed: {e}")
         finally:
             self.after(0, self._on_process_finished)
 

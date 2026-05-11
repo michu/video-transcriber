@@ -21,12 +21,22 @@ class _LocalPathDownloadService:
     """Handles downloads from local file system paths by copying the file to the output location."""
 
     def download(self, source: str, output_path: str, options: Optional[dict] = None) -> VideoDownloadResult:
-        """Copy a local file to output_path and return the result."""
+        """Copy a local file to output_path and return the result.
+        
+        If output_path has no extension, the source file extension is appended.
+        """
         if not os.path.exists(source):
             raise FileNotFoundError(f"Local file not found: {source}")
+
+        # append source extension to output path if output has none
+        src_ext = os.path.splitext(source)[1]
+        if src_ext and not os.path.splitext(output_path)[1]:
+            output_path = output_path + src_ext
+
         dir_name = os.path.dirname(output_path)
         if dir_name:
             os.makedirs(dir_name, exist_ok=True)
+
         shutil.copy2(source, output_path)
         return VideoDownloadResult(output_path, None)
 

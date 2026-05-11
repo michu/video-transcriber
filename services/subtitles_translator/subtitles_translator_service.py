@@ -103,7 +103,7 @@ class SubtitlesTranslatorService:
         max_tokens = self._resolve_max_tokens()
         margin = 64
         effective_max = max(32, max_tokens - margin)
-        logger.info(f"[translator] effective_max={effective_max} (max_tokens={max_tokens}, margin={margin})")
+        logger.info(f"effective_max={effective_max} (max_tokens={max_tokens}, margin={margin})")
 
         texts_original = [self._normalize_text(s.text) for s in subs]
         flat_texts = []
@@ -116,7 +116,7 @@ class SubtitlesTranslatorService:
             sentence_map.append(len(sentences))
             flat_texts.extend(sentences)
 
-        logger.info(f"[translator] sentence_map={sentence_map} → {len(flat_texts)} sentences from {len(subs)} entries")
+        logger.info(f"sentence_map={sentence_map} → {len(flat_texts)} sentences from {len(subs)} entries")
 
         token_lengths = self._compute_token_lengths(flat_texts)
 
@@ -126,7 +126,14 @@ class SubtitlesTranslatorService:
         for sub, count in zip(subs, sentence_map):
             translated_sentences = flat_results[cursor: cursor + count]
             cursor += count
-            merged = " ".join(s for s in translated_sentences if s)
+            merged = " ".join(
+                self._restore_case(orig, trans)
+                for orig, trans in zip(
+                    flat_texts[cursor - count: cursor],
+                    translated_sentences
+                )
+                if trans
+            )
             sub.text = self._restore_format(merged if merged else "")
 
         return subs
@@ -162,7 +169,7 @@ class SubtitlesTranslatorService:
             max_tokens = 1024
             source = "fallback(1024)"
 
-        logger.info(f"[translator] resolved max_tokens={max_tokens} from {source}")
+        logger.info(f"resolved max_tokens={max_tokens} from {source}")
         return max_tokens
 
     def _compute_token_lengths(self, texts: list[str]) -> list[int]:
@@ -191,7 +198,7 @@ class SubtitlesTranslatorService:
         while i < len(flat_texts):
             # single line exceeds budget — translate it alone
             if token_lengths[i] > effective_max:
-                logger.info(f"[translator] sentence {i} tokens={token_lengths[i]} > effective_max, single-line")
+                logger.info(f"sentence {i} tokens={token_lengths[i]} > effective_max, single-line")
                 flat_results[i] = self._translate_single_with_fallback(flat_texts[i], src_lang, tgt_lang)
                 i += 1
                 continue
@@ -212,11 +219,11 @@ class SubtitlesTranslatorService:
                 j += 1
 
             estimated_cost = chunk_max_len * max(1, len(chunk_texts))
-            logger.info(f"[translator] chunk {i}-{j-1} estimated_cost={estimated_cost} (max_len={chunk_max_len}, lines={len(chunk_texts)})")
+            logger.info(f"chunk {i}-{j-1} estimated_cost={estimated_cost} (max_len={chunk_max_len}, lines={len(chunk_texts)})")
 
             # guard against unexpected empty chunk
             if not chunk_texts:
-                logger.warning(f"[translator] empty chunk at index {i}, single-line fallback")
+                logger.warning(f"empty chunk at index {i}, single-line fallback")
                 flat_results[i] = self._translate_single_with_fallback(flat_texts[i], src_lang, tgt_lang)
                 i += 1
                 continue
@@ -224,12 +231,12 @@ class SubtitlesTranslatorService:
             # translate chunk as a batch
             try:
                 translated_list = self._translate_batch_texts(chunk_texts, src_lang, tgt_lang)
-                logger.info(f"[translator] batch returned {len(translated_list)} items for chunk {i}-{j-1}")
+                logger.info(f"batch returned {len(translated_list)} items for chunk {i}-{j-1}")
                 if len(translated_list) != len(chunk_texts):
-                    logger.warning(f"[translator] batch size mismatch, falling back to line-by-line for chunk {i}-{j-1}")
+                    logger.warning(f"batch size mismatch, falling back to line-by-line for chunk {i}-{j-1}")
                     translated_list = self._fallback_line_by_line(chunk_texts, src_lang, tgt_lang)
             except Exception as e:
-                logger.warning(f"[translator] batch failed for chunk {i}-{j-1}: {e}, falling back to line-by-line")
+                logger.warning(f"batch failed for chunk {i}-{j-1}: {e}, falling back to line-by-line")
                 translated_list = self._fallback_line_by_line(chunk_texts, src_lang, tgt_lang)
 
             for k, translated in enumerate(translated_list):
@@ -272,7 +279,7 @@ class SubtitlesTranslatorService:
         ).to(self.device)
 
         encoded_len = encoded["input_ids"].shape[1]
-        logger.debug(f"[translator] _translate_text encoded_len={encoded_len} src={src_lang} tgt={tgt_lang}")
+        logger.debug(f"_translate_text encoded_len={encoded_len} src={src_lang} tgt={tgt_lang}")
 
         forced_id = self._get_forced_bos_token_id(tgt_lang)
 
@@ -285,7 +292,7 @@ class SubtitlesTranslatorService:
                 num_beams=self.num_beams
             )
 
-        logger.debug(f"[translator] _translate_text generated_shape={generated.shape} forced_id={forced_id}")
+        logger.debug(f"_translate_text generated_shape={generated.shape} forced_id={forced_id}")
         return self.tokenizer.decode(generated[0], skip_special_tokens=True)
 
     def _translate_batch_texts(self, texts: list[str], src_lang: str, tgt_lang: str) -> list[str]:
@@ -299,7 +306,7 @@ class SubtitlesTranslatorService:
             padding=True
         ).to(self.device)
 
-        logger.debug(f"[translator] _translate_batch_texts batch_size={len(texts)} encoded_shape={encoded['input_ids'].shape} src={src_lang} tgt={tgt_lang}")
+        logger.debug(f"_translate_batch_texts batch_size={len(texts)} encoded_shape={encoded['input_ids'].shape} src={src_lang} tgt={tgt_lang}")
 
         forced_id = self._get_forced_bos_token_id(tgt_lang)
 
@@ -312,7 +319,7 @@ class SubtitlesTranslatorService:
                 num_beams=self.num_beams
             )
 
-        logger.debug(f"[translator] _translate_batch_texts generated_shape={generated.shape} forced_id={forced_id}")
+        logger.debug(f"_translate_batch_texts generated_shape={generated.shape} forced_id={forced_id}")
         return self.tokenizer.batch_decode(generated, skip_special_tokens=True)
 
     def _fallback_line_by_line(self, texts: list[str], src_lang: str, tgt_lang: str) -> list[str]:
@@ -323,6 +330,15 @@ class SubtitlesTranslatorService:
     def _normalize_text(text: str) -> str:
         """Collapse newlines and strip surrounding whitespace."""
         return text.replace("\n", " ").strip()
+
+    @staticmethod
+    def _restore_case(original: str, translated: str) -> str:
+        """Restore the original leading case of a sentence after translation."""
+        if not translated or not original:
+            return translated
+        if original and original[0].islower():
+            return translated[0].lower() + translated[1:]
+        return translated
 
     @staticmethod
     def _restore_format(text: str) -> str:
