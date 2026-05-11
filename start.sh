@@ -1,2 +1,6 @@
-source venv/bin/activate
-python app.py
+#!/bin/bash
+set -e
+
+cd "$(dirname "$0")"
+
+venv/bin/python app.py

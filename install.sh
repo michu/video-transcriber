@@ -1,6 +1,8 @@
 #!/bin/bash
 set -e
 
+cd "$(dirname "$0")"
+
 echo "Installing Video Transcriber..."
 
 python3 -m venv venv
@@ -9,9 +11,7 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-source venv/bin/activate
-
-pip install -r requirements.txt
+venv/bin/python -m pip install -r requirements.txt
 if [ $? -ne 0 ]; then
     echo "ERROR: Failed to install dependencies."
     exit 1

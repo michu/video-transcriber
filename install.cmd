@@ -1,16 +1,26 @@
 @echo off
+
+setlocal
+
+cd /d %~dp0
+
 echo Installing Video Transcriber...
 
 python -m venv venv
 if errorlevel 1 (
-    echo ERROR: Failed to create virtual environment. Make sure Python 3.12 is installed and in PATH.
+    echo ERROR: Failed to create virtual environment. Make sure Python is installed and in PATH.
     pause
     exit /b 1
 )
 
-call venv\Scripts\activate.bat
+venv\Scripts\python -m pip install --upgrade pip
+if errorlevel 1 (
+    echo ERROR: Failed to upgrade pip.
+    pause
+    exit /b 1
+)
 
-pip install -r requirements.txt
+venv\Scripts\python -m pip install -r requirements.txt
 if errorlevel 1 (
     echo ERROR: Failed to install dependencies.
     pause
