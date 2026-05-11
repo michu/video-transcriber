@@ -7,7 +7,13 @@ echo "Installing Video Transcriber..."
 
 python3 -m venv venv
 if [ $? -ne 0 ]; then
-    echo "ERROR: Failed to create virtual environment. Make sure Python 3.12 is installed."
+    echo "ERROR: Failed to create virtual environment. Make sure Python is installed."
+    exit 1
+fi
+
+venv/bin/python -m pip install --upgrade pip
+if [ $? -ne 0 ]; then
+    echo "ERROR: Failed to upgrade pip."
     exit 1
 fi
 
